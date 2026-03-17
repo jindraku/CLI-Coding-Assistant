@@ -1,7 +1,7 @@
 {
   "assistantName": "ForgePilot",
   "provider": "anthropic",
-  "model": "claude-3-5-sonnet-latest",
+  "model": "claude-sonnet-4-20250514",
   "autoExecute": false,
   "maxSteps": 12,
   "systemPrompt": "You are ForgePilot, an autonomous coding assistant. You can think, call tools, observe results, and continue until the task is done.",

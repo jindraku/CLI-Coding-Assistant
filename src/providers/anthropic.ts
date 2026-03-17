@@ -38,7 +38,8 @@ export class AnthropicProvider implements LLMProvider {
     });
 
     if (!res.ok || !res.body) {
-      throw new Error(`Anthropic error: ${res.status} ${res.statusText}`);
+      const details = await safeReadError(res);
+      throw new Error(`Anthropic error: ${res.status} ${res.statusText}${details ? ` - ${details}` : ""}`);
     }
 
     const reader = res.body.getReader();
@@ -68,5 +69,14 @@ export class AnthropicProvider implements LLMProvider {
         }
       }
     }
+  }
+}
+
+async function safeReadError(res: Response): Promise<string> {
+  try {
+    const text = await res.text();
+    return text.trim();
+  } catch {
+    return "";
   }
 }
