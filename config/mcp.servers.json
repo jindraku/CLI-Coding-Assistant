@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/"],
+      "env": {}
+    },
+    {
+      "name": "context7",
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server"],
+      "env": {
+        "CONTEXT7_API_KEY": "SET_ME"
+      },
+      "enabled": false
+    },
+    {
+      "name": "rag",
+      "command": "npx",
+      "args": ["-y", "tsx", "servers/rag-server/src/index.ts"],
+      "env": {}
+    }
+  ]
+}
