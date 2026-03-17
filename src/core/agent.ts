@@ -1,8 +1,8 @@
 import { ChatMessage, LLMProvider } from "../providers/types.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { ToolRegistry } from "../tools/registry.js";
-import { ToolCall } from "../tools/types.js";
-import { log } from "../logger.js";
+import { ToolCall, ToolSpec } from "../tools/types.js";
+import { TerminalUI } from "../ui/terminal.js";
 
 const TOOL_CALL_OPEN = "<tool_call>";
 const TOOL_CALL_CLOSE = "</tool_call>";
@@ -10,6 +10,7 @@ const TOOL_CALL_CLOSE = "</tool_call>";
 export interface AgentOptions {
   maxSteps: number;
   model: string;
+  history?: ChatMessage[];
 }
 
 export class AgentRunner {
@@ -17,11 +18,13 @@ export class AgentRunner {
     private provider: LLMProvider,
     private registry: ToolRegistry,
     private executor: ToolExecutor,
-    private systemPrompt: string
+    private systemPrompt: string,
+    private ui: TerminalUI
   ) {}
 
-  async run(task: string, options: AgentOptions): Promise<void> {
+  async run(task: string, options: AgentOptions): Promise<ChatMessage[]> {
     const toolCatalog = buildToolCatalog(this.registry);
+    const history = options.history ?? [];
     const messages: ChatMessage[] = [
       {
         role: "system",
@@ -29,24 +32,33 @@ export class AgentRunner {
           this.systemPrompt +
           `\n\nAvailable tools:\n${toolCatalog}\n\nUse tool calls with the format ${TOOL_CALL_OPEN}{"name":"tool","args":{...}}${TOOL_CALL_CLOSE}.`,
       },
+      ...history,
       { role: "user", content: task },
     ];
+    const sessionMessages: ChatMessage[] = [{ role: "user", content: task }];
 
     for (let step = 0; step < options.maxSteps; step += 1) {
-      log.subtle(`\n[step ${step + 1}/${options.maxSteps}]`);
+      this.ui.printStep(step + 1, options.maxSteps);
       const assistant = await this.generate(messages, options.model);
+      this.ui.endAssistantResponse();
       messages.push({ role: "assistant", content: assistant });
+      sessionMessages.push({ role: "assistant", content: assistant });
 
       const toolCalls = extractToolCalls(assistant);
       if (toolCalls.length === 0) {
-        return;
+        return sessionMessages;
       }
 
       for (const call of toolCalls) {
-        log.info(`[tool] ${call.name} ${JSON.stringify(call.args)}`);
+        this.ui.printToolCall(call.name, call.args);
         const result = await this.executor.run(call);
-        log.subtle(`[tool result] ${result.content.slice(0, 4000)}`);
+        this.ui.printToolResult(call.name, result.content.slice(0, 4000));
         messages.push({
+          role: "tool",
+          name: call.name,
+          content: result.content,
+        });
+        sessionMessages.push({
           role: "tool",
           name: call.name,
           content: result.content,
@@ -54,22 +66,23 @@ export class AgentRunner {
       }
     }
 
-    log.warn("Max steps reached without completion.");
+    this.ui.printWarn("Max steps reached without completion.");
+    return sessionMessages;
   }
 
   private async generate(messages: ChatMessage[], model: string): Promise<string> {
-    const toolSpecs = [];
+    const toolSpecs: ToolSpec[] = [];
     let full = "";
 
     try {
       for await (const chunk of this.provider.streamChat(messages, toolSpecs, { model })) {
         if (chunk.content) {
-          process.stdout.write(chunk.content);
+          this.ui.printAssistantText(chunk.content);
           full += chunk.content;
         }
       }
     } catch (err) {
-      log.error(err instanceof Error ? err.message : String(err));
+      this.ui.printError(err instanceof Error ? err.message : String(err));
     }
 
     return full;

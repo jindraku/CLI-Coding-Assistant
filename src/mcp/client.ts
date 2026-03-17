@@ -32,13 +32,13 @@ export class MCPManager {
       const transport = new StdioClientTransport({
         command: server.command,
         args: server.args ?? [],
-        env: { ...process.env, ...(server.env ?? {}) },
+        env: cleanEnv({
+          ...process.env,
+          ...(server.env ?? {}),
+        }),
       });
 
-      const client = new Client(
-        { name: "forgepilot", version: "0.1.0" },
-        { capabilities: { tools: {} } }
-      );
+      const client = new Client({ name: "forgepilot", version: "0.1.0" }, { capabilities: {} });
 
       await client.connect(transport);
       this.clients.push(client);
@@ -62,7 +62,8 @@ export class MCPManager {
               arguments: args,
             });
 
-            const parts = result.content
+            const content = Array.isArray(result.content) ? result.content : [];
+            const parts = content
               .map((part: any) => (part.text ? part.text : JSON.stringify(part)))
               .join("\n");
 
@@ -79,4 +80,10 @@ export class MCPManager {
     await Promise.all(this.clients.map((client) => client.close()));
     this.clients = [];
   }
+}
+
+function cleanEnv(env: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  );
 }

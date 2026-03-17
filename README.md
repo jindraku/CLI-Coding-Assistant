@@ -4,7 +4,7 @@ ForgePilot is an autonomous command-line coding assistant. It takes natural lang
 
 ## Highlights
 - Agentic loop with tool calling and observation steps
-- Provider abstraction with local (Ollama) and cloud (OpenAI, Anthropic, Groq)
+- Provider abstraction with Anthropic as the default model provider and support for Ollama, OpenAI, and Groq
 - MCP client that loads tools dynamically from servers
 - Built-in tools for file operations, search, and shell commands
 - Custom MCP RAG server using fusion retrieval (BM25 + TF-IDF with Reciprocal Rank Fusion)
@@ -13,6 +13,7 @@ ForgePilot is an autonomous command-line coding assistant. It takes natural lang
 ## Quickstart
 ```bash
 npm install
+export ANTHROPIC_API_KEY=your_key_here
 npm run dev
 ```
 
@@ -34,6 +35,8 @@ Important fields:
 - `model`: Model name for the chosen provider
 - `autoExecute`: When `true`, tools run without confirmation
 - `mcpServersPath`: MCP server definitions
+
+By default, ForgePilot uses `anthropic` as the LLM provider. MCP is a separate layer: it supplies tools from the filesystem server, external resource servers such as Context7/Tavily, and the local RAG server.
 
 Set provider API keys in `.env`:
 ```
@@ -82,6 +85,11 @@ MCP servers are defined in `config/mcp.servers.json`. Example:
 
 Enable external MCP servers by setting `enabled` to `true` and providing the required API key(s).
 
+The expected MCP stack is:
+- `filesystem`: local file access
+- `context7` or `tavily`: external resource retrieval
+- `rag`: local advanced-RAG documentation server
+
 ## Custom RAG MCP Server
 The RAG server lives in `servers/rag-server`. It builds a local index and supports fusion retrieval using Reciprocal Rank Fusion.
 
@@ -114,6 +122,7 @@ Example tool call:
 - `servers/rag-server`: Custom MCP server for advanced RAG
 
 ## Notes
-- Ollama must be running locally at `http://localhost:11434` for local models.
+- Anthropic is the default provider, so `ANTHROPIC_API_KEY` must be set unless you override `provider`.
+- Ollama must be running locally at `http://localhost:11434` only when you switch to the `ollama` provider.
 - The RAG server indexes `.md`, `.txt`, and `.rst` by default.
 - The agent stops after `maxSteps` to prevent runaway loops.

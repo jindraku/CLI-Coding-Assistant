@@ -1,12 +1,13 @@
 import readline from "node:readline";
 import { ToolRegistry } from "./registry.js";
 import { ToolCall, ToolResult } from "./types.js";
-import { log } from "../logger.js";
+import { TerminalUI } from "../ui/terminal.js";
 
 export class ToolExecutor {
   constructor(
     private registry: ToolRegistry,
-    private confirmBeforeRun: boolean
+    private confirmBeforeRun: boolean,
+    private ui: TerminalUI
   ) {}
 
   async run(call: ToolCall): Promise<ToolResult> {
@@ -35,7 +36,7 @@ export class ToolExecutor {
     const normalized = answer.trim().toLowerCase();
     const ok = normalized === "y" || normalized === "yes";
     if (!ok) {
-      log.warn(`Denied tool call: ${call.name}`);
+      this.ui.printWarn(`Denied tool call: ${call.name}`);
     }
     return ok;
   }

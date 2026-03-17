@@ -8,7 +8,8 @@ import { ToolExecutor } from "./tools/executor.js";
 import { MCPManager } from "./mcp/client.js";
 import { AgentRunner } from "./core/agent.js";
 import { startRepl } from "./ui/repl.js";
-import { log } from "./logger.js";
+import { SessionStore } from "./ui/sessions.js";
+import { TerminalUI } from "./ui/terminal.js";
 
 const program = new Command();
 
@@ -31,16 +32,25 @@ const providerName = opts.provider ?? config.provider;
 const model = opts.model ?? config.model;
 const maxSteps = Number(opts.maxSteps ?? config.maxSteps);
 const autoExecute = Boolean(opts.auto ?? config.autoExecute);
+const version = "v0.1.0";
 
 const provider = createProvider(providerName);
 const registry = new ToolRegistry();
-const executor = new ToolExecutor(registry, !autoExecute);
-const agent = new AgentRunner(provider, registry, executor, config.systemPrompt);
+const ui = new TerminalUI();
+const executor = new ToolExecutor(registry, !autoExecute, ui);
+const agent = new AgentRunner(provider, registry, executor, config.systemPrompt, ui);
+const sessionStore = new SessionStore(cwd);
 
 const mcpManager = new MCPManager();
 
 async function boot(): Promise<void> {
-  log.info(`Using provider ${providerName} with model ${model}`);
+  ui.renderHeader({
+    assistantName: config.assistantName,
+    workspace: cwd,
+    provider: providerName,
+    model,
+    version,
+  });
 
   for (const tool of createBuiltinTools(cwd)) {
     registry.register(tool);
@@ -53,19 +63,32 @@ async function boot(): Promise<void> {
       registry.register(tool);
     }
   } catch (err) {
-    log.warn(`MCP server load failed: ${err instanceof Error ? err.message : String(err)}`);
+    ui.printWarn(`MCP server load failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (opts.once) {
+    ui.printPromptEcho(String(opts.once));
     await agent.run(String(opts.once), { model, maxSteps });
   } else {
-    await startRepl(agent, model, maxSteps, config.assistantName);
+    await startRepl(agent, {
+      model,
+      maxSteps,
+      header: {
+        assistantName: config.assistantName,
+        workspace: cwd,
+        provider: providerName,
+        model,
+        version,
+      },
+      sessionStore,
+      ui,
+    });
   }
 }
 
 boot()
   .catch((err) => {
-    log.error(err instanceof Error ? err.message : String(err));
+    ui.printError(err instanceof Error ? err.message : String(err));
   })
   .finally(async () => {
     await mcpManager.close();
