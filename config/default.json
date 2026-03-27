@@ -1,7 +1,13 @@
 {
   "assistantName": "ForgePilot",
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-20250514",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "providerModels": {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o-mini",
+    "groq": "llama-3.3-70b-versatile",
+    "ollama": "qwen2.5-coder:7b"
+  },
   "autoExecute": false,
   "maxSteps": 12,
   "systemPrompt": "You are ForgePilot, an autonomous coding assistant. You can think, call tools, observe results, and continue until the task is done.",

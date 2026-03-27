@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { chunkText } from "./chunker.js";
 import { tokenize } from "./tokenize.js";
+import { DEFAULT_VECTOR_DIMENSIONS, embedText, LOCAL_EMBEDDING_MODEL } from "./embeddings.js";
 import { ChunkRecord, IndexData } from "./types.js";
 
 const DEFAULT_EXTENSIONS = new Set([".md", ".txt", ".rst"]);
@@ -12,11 +13,13 @@ export interface IndexOptions {
   chunkSize: number;
   chunkOverlap: number;
   extensions?: string[];
+  vectorDimensions?: number;
 }
 
 export async function buildIndex(options: IndexOptions): Promise<IndexData> {
   const files = walkFiles(options.root, options.extensions ?? Array.from(DEFAULT_EXTENSIONS));
   const chunks: ChunkRecord[] = [];
+  const vectorDimensions = options.vectorDimensions ?? DEFAULT_VECTOR_DIMENSIONS;
 
   for (const filePath of files) {
     const text = fs.readFileSync(filePath, "utf8");
@@ -40,6 +43,7 @@ export async function buildIndex(options: IndexOptions): Promise<IndexData> {
         tf,
         length: tokens.length,
         tfidfNorm: 1,
+        embedding: embedText(piece, vectorDimensions),
       });
     }
   }
@@ -50,11 +54,13 @@ export async function buildIndex(options: IndexOptions): Promise<IndexData> {
   }
 
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     root: options.root,
     idf,
     avgDocLen,
+    embeddingModel: LOCAL_EMBEDDING_MODEL,
+    vectorDimensions,
     docs: chunks,
   };
 }

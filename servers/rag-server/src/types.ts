@@ -6,13 +6,16 @@ export interface ChunkRecord {
   tf: Record<string, number>;
   length: number;
   tfidfNorm: number;
+  embedding: number[];
 }
 
 export interface IndexData {
-  version: 1;
+  version: 2;
   createdAt: string;
   root: string;
   idf: Record<string, number>;
   avgDocLen: number;
+  embeddingModel: string;
+  vectorDimensions: number;
   docs: ChunkRecord[];
 }

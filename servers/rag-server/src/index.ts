@@ -13,6 +13,7 @@ const IndexArgs = z.object({
   chunkSize: z.number().optional(),
   chunkOverlap: z.number().optional(),
   extensions: z.array(z.string()).optional(),
+  vectorDimensions: z.number().optional(),
 });
 
 const QueryArgs = z.object({
@@ -35,7 +36,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "rag.index",
-        description: "Index a documentation folder into a local vector store using fusion retrieval.",
+        description: "Index a documentation folder into a persisted local vector database using embedding retrieval plus fusion ranking.",
         inputSchema: {
           type: "object",
           properties: {
@@ -44,13 +45,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             chunkSize: { type: "number" },
             chunkOverlap: { type: "number" },
             extensions: { type: "array", items: { type: "string" } },
+            vectorDimensions: { type: "number" },
           },
           required: ["root"],
         },
       },
       {
         name: "rag.query",
-        description: "Query the indexed documentation using reciprocal rank fusion.",
+        description: "Query the indexed documentation using embeddings, BM25, TF-IDF, and reciprocal rank fusion.",
         inputSchema: {
           type: "object",
           properties: {
@@ -86,13 +88,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       chunkSize: parsed.chunkSize ?? 900,
       chunkOverlap: parsed.chunkOverlap ?? 120,
       extensions: parsed.extensions,
+      vectorDimensions: parsed.vectorDimensions,
     });
     saveIndex(dbPath, index);
     return {
       content: [
         {
           type: "text",
-          text: `Indexed ${index.docs.length} chunks from ${index.root}. Saved to ${dbPath}`,
+          text: `Indexed ${index.docs.length} chunks from ${index.root}. Saved vector database to ${dbPath} using ${index.embeddingModel} (${index.vectorDimensions} dims).`,
         },
       ],
     };
@@ -133,7 +136,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: "text",
-          text: `Index root: ${index.root}\nChunks: ${index.docs.length}\nCreated: ${index.createdAt}`,
+          text: `Index root: ${index.root}\nChunks: ${index.docs.length}\nCreated: ${index.createdAt}\nEmbedding model: ${index.embeddingModel}\nVector dimensions: ${index.vectorDimensions}`,
         },
       ],
     };

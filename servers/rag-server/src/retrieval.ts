@@ -1,4 +1,5 @@
 import { IndexData, ChunkRecord } from "./types.js";
+import { cosineSimilarity, embedText } from "./embeddings.js";
 import { tokenize } from "./tokenize.js";
 
 export interface RetrievalResult {
@@ -21,9 +22,11 @@ export function queryIndex(index: IndexData, query: string, topK: number): Retri
 
   const bm25Scores = scoreBM25(index, qTokens);
   const tfidfScores = scoreTfIdf(index, qTokens);
+  const vectorScores = scoreVectors(index, query);
 
   const bm25Rank = rankScores(bm25Scores);
   const tfidfRank = rankScores(tfidfScores);
+  const vectorRank = rankScores(vectorScores);
 
   const fused = new Map<string, RetrievalResult>();
 
@@ -44,9 +47,34 @@ export function queryIndex(index: IndexData, query: string, topK: number): Retri
     }
   }
 
+  for (const [id, rank] of vectorRank) {
+    const entry = vectorScores.get(id)!;
+    const score = 1 / (RRF_K + rank);
+    const existing = fused.get(id);
+    if (existing) {
+      existing.score += score;
+    } else {
+      fused.set(id, { chunk: entry.doc, score });
+    }
+  }
+
   return Array.from(fused.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
+}
+
+function scoreVectors(index: IndexData, query: string): Map<string, ScoreEntry> {
+  const queryEmbedding = embedText(query, index.vectorDimensions);
+  const scores = new Map<string, ScoreEntry>();
+
+  for (const doc of index.docs) {
+    const score = cosineSimilarity(queryEmbedding, doc.embedding);
+    if (score > 0) {
+      scores.set(doc.id, { doc, score });
+    }
+  }
+
+  return scores;
 }
 
 function scoreBM25(index: IndexData, qTokens: string[]): Map<string, ScoreEntry> {

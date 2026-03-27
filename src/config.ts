@@ -5,6 +5,7 @@ export interface AssistantConfig {
   assistantName: string;
   provider: "ollama" | "openai" | "anthropic" | "groq";
   model: string;
+  providerModels?: Partial<Record<"ollama" | "openai" | "anthropic" | "groq", string>>;
   autoExecute: boolean;
   maxSteps: number;
   systemPrompt: string;

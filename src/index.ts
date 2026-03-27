@@ -29,7 +29,7 @@ const opts = program.opts();
 const cwd = process.cwd();
 const config = loadConfig(cwd, opts.config);
 const providerName = opts.provider ?? config.provider;
-const model = opts.model ?? config.model;
+const model = opts.model ?? selectModel(providerName, config);
 const maxSteps = Number(opts.maxSteps ?? config.maxSteps);
 const autoExecute = Boolean(opts.auto ?? config.autoExecute);
 const version = "v0.1.0";
@@ -93,3 +93,7 @@ boot()
   .finally(async () => {
     await mcpManager.close();
   });
+
+function selectModel(provider: string, config: ReturnType<typeof loadConfig>): string {
+  return config.providerModels?.[provider as keyof NonNullable<typeof config.providerModels>] ?? config.model;
+}

@@ -20,37 +20,17 @@ export class OpenAIProvider implements LLMProvider {
       throw new Error("OPENAI_API_KEY is not set");
     }
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model,
-        messages,
-        temperature: options.temperature ?? 0.2,
-        tools: tools.length
-          ? tools.map((tool) => ({
-              type: "function",
-              function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.inputSchema,
-              },
-            }))
-          : undefined,
-        stream: true,
-      }),
-    });
+    const res = await this.createCompletion(apiKey, messages, tools, options);
 
     if (!res.ok || !res.body) {
-      throw new Error(`OpenAI error: ${res.status} ${res.statusText}`);
+      const details = await safeReadError(res);
+      throw new Error(`OpenAI error: ${res.status} ${res.statusText}${details ? ` - ${details}` : ""}`);
     }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const pendingToolCalls = new Map<number, { name: string; arguments: string }>();
 
     while (true) {
       const { value, done } = await reader.read();
@@ -74,9 +54,52 @@ export class OpenAIProvider implements LLMProvider {
           if (delta?.content) {
             yield { content: delta.content };
           }
+          if (Array.isArray(delta?.tool_calls)) {
+            for (const toolCall of delta.tool_calls) {
+              const index = Number(toolCall.index ?? 0);
+              const existing = pendingToolCalls.get(index) ?? { name: "", arguments: "" };
+              if (toolCall.function?.name) {
+                existing.name = toolCall.function.name;
+              }
+              if (toolCall.function?.arguments) {
+                existing.arguments += toolCall.function.arguments;
+              }
+              pendingToolCalls.set(index, existing);
+            }
+          }
         }
       }
     }
+
+    for (const toolCall of pendingToolCalls.values()) {
+      if (!toolCall.name) continue;
+      const args = parseToolArguments(toolCall.arguments);
+      yield { content: formatToolCall(toolCall.name, args) };
+    }
+  }
+
+  protected createCompletion(
+    apiKey: string,
+    messages: ChatMessage[],
+    tools: ToolSpec[],
+    options: ProviderOptions
+  ): Promise<Response> {
+    const normalizedMessages = normalizeMessages(messages);
+
+    return fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options.model,
+        messages: normalizedMessages,
+        temperature: options.temperature ?? 0.2,
+        tools: toFunctionTools(tools),
+        stream: true,
+      }),
+    });
   }
 }
 
@@ -97,37 +120,32 @@ export class GroqProvider extends OpenAIProvider {
       throw new Error("GROQ_API_KEY is not set");
     }
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model,
-        messages,
-        temperature: options.temperature ?? 0.2,
-        tools: tools.length
-          ? tools.map((tool) => ({
-              type: "function",
-              function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.inputSchema,
-              },
-            }))
-          : undefined,
-        stream: true,
-      }),
-    });
+    let res = await this.createCompletion(apiKey, messages, tools, options);
+
+    if (!res.ok && res.status === 400 && tools.length > 0) {
+      const details = await safeReadError(res);
+      const retried = await this.createCompletion(apiKey, messages, [], options);
+      if (retried.ok && retried.body) {
+        res = retried;
+      } else {
+        const retryDetails = await safeReadError(retried);
+        throw new Error(
+          `Groq error: ${res.status} ${res.statusText}${details ? ` - ${details}` : ""}${
+            retryDetails ? ` | Retry without tools failed: ${retryDetails}` : ""
+          }`
+        );
+      }
+    }
 
     if (!res.ok || !res.body) {
-      throw new Error(`Groq error: ${res.status} ${res.statusText}`);
+      const details = await safeReadError(res);
+      throw new Error(`Groq error: ${res.status} ${res.statusText}${details ? ` - ${details}` : ""}`);
     }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const pendingToolCalls = new Map<number, { name: string; arguments: string }>();
 
     while (true) {
       const { value, done } = await reader.read();
@@ -151,8 +169,93 @@ export class GroqProvider extends OpenAIProvider {
           if (delta?.content) {
             yield { content: delta.content };
           }
+          if (Array.isArray(delta?.tool_calls)) {
+            for (const toolCall of delta.tool_calls) {
+              const index = Number(toolCall.index ?? 0);
+              const existing = pendingToolCalls.get(index) ?? { name: "", arguments: "" };
+              if (toolCall.function?.name) {
+                existing.name = toolCall.function.name;
+              }
+              if (toolCall.function?.arguments) {
+                existing.arguments += toolCall.function.arguments;
+              }
+              pendingToolCalls.set(index, existing);
+            }
+          }
         }
       }
     }
+
+    for (const toolCall of pendingToolCalls.values()) {
+      if (!toolCall.name) continue;
+      const args = parseToolArguments(toolCall.arguments);
+      yield { content: formatToolCall(toolCall.name, args) };
+    }
   }
+}
+
+function toFunctionTools(tools: ToolSpec[]):
+  | Array<{
+      type: "function";
+      function: {
+        name: string;
+        description: string;
+        parameters: Record<string, unknown>;
+      };
+    }>
+  | undefined {
+  return tools.length
+    ? tools.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      }))
+    : undefined;
+}
+
+async function safeReadError(res: Response): Promise<string> {
+  try {
+    const text = await res.text();
+    return text.trim();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeMessages(messages: ChatMessage[]): Array<{
+  role: "system" | "user" | "assistant";
+  content: string;
+}> {
+  return messages.map((message) => {
+    if (message.role === "tool") {
+      return {
+        role: "user",
+        content: `Tool result from ${message.name ?? "tool"}:\n${message.content}`,
+      };
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+    };
+  });
+}
+
+function parseToolArguments(raw: string): Record<string, unknown> {
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return { raw };
+  }
+}
+
+function formatToolCall(name: string, args: Record<string, unknown>): string {
+  return `<tool_call>${JSON.stringify({ name, args })}</tool_call>`;
 }

@@ -71,7 +71,7 @@ export class AgentRunner {
   }
 
   private async generate(messages: ChatMessage[], model: string): Promise<string> {
-    const toolSpecs: ToolSpec[] = [];
+    const toolSpecs: ToolSpec[] = this.registry.listSpecs();
     let full = "";
 
     try {
@@ -101,9 +101,10 @@ function extractToolCalls(text: string): ToolCall[] {
 
     const payload = text.slice(openIndex + TOOL_CALL_OPEN.length, closeIndex).trim();
     try {
-      const parsed = JSON.parse(payload) as ToolCall;
-      if (parsed?.name) {
-        calls.push({ name: parsed.name, args: parsed.args ?? {} });
+      const parsed = JSON.parse(payload) as Record<string, unknown>;
+      const normalized = normalizeToolCall(parsed);
+      if (normalized) {
+        calls.push(normalized);
       }
     } catch {
       // ignore invalid tool call
@@ -113,6 +114,41 @@ function extractToolCalls(text: string): ToolCall[] {
   }
 
   return calls;
+}
+
+function normalizeToolCall(payload: Record<string, unknown>): ToolCall | null {
+  const name = typeof payload.name === "string" ? payload.name : null;
+  if (!name) {
+    return null;
+  }
+
+  if (isRecord(payload.args)) {
+    return { name, args: payload.args };
+  }
+
+  if (isRecord(payload.parameters)) {
+    return { name, args: unwrapParameterValues(payload.parameters) };
+  }
+
+  return { name, args: {} };
+}
+
+function unwrapParameterValues(parameters: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(parameters)) {
+    if (isRecord(value) && "value" in value) {
+      result[key] = value.value;
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildToolCatalog(registry: ToolRegistry): string {
