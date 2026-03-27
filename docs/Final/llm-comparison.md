@@ -1,39 +1,42 @@
-# LLM Comparison – ForgePilot
+# RAG Implementation – ForgePilot
 
-## Task
-Fix duplicate function bug in a code file
+## Overview
+ForgePilot uses a custom MCP RAG server implementing hybrid retrieval with a persisted local index.
 
----
+This is not a third-party hosted RAG pipeline. It is built using local indexing, local embeddings, and custom retrieval logic.
 
-## Ollama (Local)
+## Retrieval Technique
 
-Pros:
-- no cost
-- runs locally
+ForgePilot combines four retrieval signals:
 
-Cons:
-- incorrect tool selection
-- required multiple steps
-- incomplete fix
+1. BM25 scoring (keyword relevance)
+2. TF-IDF similarity
+3. local embedding-based cosine similarity
+4. Reciprocal Rank Fusion (RRF)
 
----
+This creates a hybrid retrieval system that balances lexical matching and semantic similarity.
 
-## OpenAI / Groq (Cloud)
+## Indexing Pipeline
 
-Pros:
-- accurate reasoning
-- correct tool calls
-- completed task successfully
+- Files are read from the documentation folder
+- Text is chunked using a sliding-window chunker
+- Tokens are generated with stopword filtering
+- TF and IDF values are computed
+- Local embeddings are generated for each chunk
+- All data is stored in a persisted local index at `.rag/index.json`
 
-Cons:
-- requires API key
-- usage cost
+## Retrieval Pipeline
 
----
+- Query is tokenized
+- BM25 scores are computed
+- TF-IDF scores are computed
+- Query embedding is generated locally
+- Cosine similarity is computed against stored chunk embeddings
+- Results are combined using Reciprocal Rank Fusion (RRF)
 
-## Conclusion
+## Benefits
 
-Cloud models significantly outperformed local models in:
-- multi-step reasoning
-- tool execution
-- final output accuracy
+- better recall than keyword-only search
+- stronger ranking quality
+- improved handling of vague or partially matching queries
+- persistent local retrieval that can be reused across future sessions
