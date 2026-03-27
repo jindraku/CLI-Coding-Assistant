@@ -1,35 +1,42 @@
 # RAG Implementation – ForgePilot
 
 ## Overview
-ForgePilot uses a custom MCP RAG server implementing Fusion Retrieval.
+ForgePilot uses a custom MCP RAG server implementing hybrid retrieval with a persisted local index.
 
-This is not a third-party library — it is built using local indexing and retrieval logic.
+This is not a third-party hosted RAG pipeline. It is built using local indexing, local embeddings, and custom retrieval logic.
 
 ## Retrieval Technique
 
-Fusion Retrieval combines:
+ForgePilot combines four retrieval signals:
 
 1. BM25 scoring (keyword relevance)
 2. TF-IDF similarity
-3. Reciprocal Rank Fusion (RRF)
+3. local embedding-based cosine similarity
+4. Reciprocal Rank Fusion (RRF)
+
+This creates a hybrid retrieval system that balances lexical matching and semantic similarity.
 
 ## Indexing Pipeline
 
-- Files read from documentation folder
-- Chunked using sliding window approach
-- Tokenized (stopword filtering applied)
-- TF and IDF values computed
-- Stored in JSON vector-like database
+- Files are read from the documentation folder
+- Text is chunked using a sliding-window chunker
+- Tokens are generated with stopword filtering
+- TF and IDF values are computed
+- Local embeddings are generated for each chunk
+- All data is stored in a persisted local index at `.rag/index.json`
 
 ## Retrieval Pipeline
 
-- Query tokenized
-- BM25 scores computed
-- TF-IDF scores computed
-- Combined using RRF
+- Query is tokenized
+- BM25 scores are computed
+- TF-IDF scores are computed
+- Query embedding is generated locally
+- Cosine similarity is computed against stored chunk embeddings
+- Results are combined using Reciprocal Rank Fusion (RRF)
 
 ## Benefits
 
-- higher recall than keyword-only search
-- better ranking of relevant documents
-- robust performance on vague queries
+- better recall than keyword-only search
+- stronger ranking quality
+- improved handling of vague or partially matching queries
+- persistent local retrieval that can be reused across future sessions
