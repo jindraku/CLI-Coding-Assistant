@@ -140,3 +140,4 @@ Additional `rag.index` options:
 - The RAG server indexes `.md`, `.txt`, and `.rst` by default unless you override `extensions`.
 - If one cloud provider account is blocked by billing or quota, switch providers with `--provider <name>` or use Ollama locally.
 - The agent stops after `maxSteps` to prevent runaway loops.
+- Planning documents, architecture notes, and final project writeups are included in `docs/planning` and `docs/final`.
