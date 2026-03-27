@@ -1,4 +1,6 @@
 # Sequence Diagram – File Edit
+<img width="2996" height="2888" alt="Editfile_Sequence" src="https://github.com/user-attachments/assets/11641662-d13a-4f2f-b6a5-fc23e573d3a0" />
+
 
 User → CLI → AgentRunner  
 AgentRunner → LLM  
